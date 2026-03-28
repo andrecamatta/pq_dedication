@@ -479,6 +479,66 @@ println("""
     trazê-los para a carteira ótima.
 """)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 12. CURVA IMPLÍCITA vs CURVA DE MERCADO (bootstrapping)
+# ─────────────────────────────────────────────────────────────────────────────
+#  Extraímos a curva de mercado a partir dos preços e fluxos dos bonds via
+#  bootstrapping iterativo, e comparamos com a curva implícita dos shadow prices.
+#  A diferença revela o "custo de restrição" da dedicação: a curva implícita
+#  reflete não só o valor do dinheiro no tempo, mas também a escassez ou
+#  abundância de instrumentos em cada prazo do universo disponível.
+
+println("\n" * "=" ^ 80)
+println("  CURVA IMPLÍCITA (Shadow Prices) vs CURVA DE MERCADO (Bootstrapping)")
+println("=" ^ 80)
+
+# Bootstrapping: para cada vencimento, usar o bond correspondente para
+# extrair o fator de desconto de mercado.
+# Organizamos os bonds por vencimento (1 bond por vencimento neste exemplo).
+sorted_bonds = sort(collect(enumerate(bonds)), by = x -> x[2].maturity)
+
+# Fatores de desconto de mercado via bootstrapping
+d_market = zeros(T)
+
+for (idx, (j, b)) in enumerate(sorted_bonds)
+    mat = b.maturity
+    coupon = b.coupon_rate * b.face_value
+    # Preço = Σ(cupom × d[t], t=1..mat-1) + (cupom + face) × d[mat]
+    # Resolver para d[mat]:
+    pv_coupons = sum(coupon * d_market[t] for t in 1:mat-1; init=0.0)
+    d_market[mat] = (b.price - pv_coupons) / (coupon + b.face_value)
+end
+
+# Taxas spot de mercado
+rates_market = [(1.0 / d_market[t])^(1.0 / t) - 1.0 for t in 1:T]
+
+# Taxas spot implícitas (já calculadas via shadow prices)
+rates_implicit = [(1.0 / abs(shadow_prices[t]))^(1.0 / t) - 1.0 for t in 1:T]
+
+curve_df = DataFrame(
+    Ano = 1:T,
+    FD_Mercado = [d_market[t] for t in 1:T],
+    FD_Implícito = [abs(shadow_prices[t]) for t in 1:T],
+    Taxa_Mercado = [@sprintf("%.3f%%", rates_market[t] * 100) for t in 1:T],
+    Taxa_Implícita = [@sprintf("%.3f%%", rates_implicit[t] * 100) for t in 1:T],
+    Spread_bps = [round(Int, (rates_implicit[t] - rates_market[t]) * 10000) for t in 1:T]
+)
+
+pretty_table(curve_df, alignment=:c)
+
+println("""
+
+  Interpretação:
+  • A curva de mercado é extraída por bootstrapping dos preços dos bonds.
+  • A curva implícita vem dos shadow prices da relaxação LP.
+  • O spread (em basis points) entre as duas revela onde o universo de
+    títulos disponíveis impõe custo adicional para cobrir passivos.
+  • Spreads positivos indicam prazos onde a dedicação é relativamente
+    mais cara que o "preço de mercado" do dinheiro — sinalizam escassez
+    de instrumentos eficientes naquele horizonte.
+  • Spreads negativos indicam prazos bem cobertos pelo universo disponível.
+""")
+
 println("=" ^ 80)
 println("  FIM DA ANÁLISE")
 println("=" ^ 80)
