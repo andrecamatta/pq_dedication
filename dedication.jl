@@ -357,6 +357,128 @@ println("""
   estritamente necessário, gerando surplus (caixa excedente) em alguns anos.
 """)
 
+# ─────────────────────────────────────────────────────────────────────────────
+# 10. ANÁLISE PARAMÉTRICA: LP vs MILP sob variação do passivo (DeJans, 2025)
+# ─────────────────────────────────────────────────────────────────────────────
+#  Variamos o passivo do Ano 5 de -300 a +500 e resolvemos LP e MILP em cada
+#  ponto. Isso revela:
+#   - O custo LP varia linearmente (como previsto pelo shadow price)
+#   - O custo MILP varia em degraus (soluções inteiras mudam discretamente)
+#   - Para perturbações grandes, o shadow price perde validade preditiva
+
+println("\n" * "=" ^ 80)
+println("  ANÁLISE PARAMÉTRICA: Custo LP vs MILP ao variar passivo do Ano 5")
+println("=" ^ 80)
+
+sweep_year = 5
+deltas = collect(-300:50:500)
+
+lp_base = objective_value(model_lp)
+milp_base = objective_value(model_milp)
+sp5 = shadow_prices[sweep_year]
+
+param_df = DataFrame(
+    Delta = Int[],
+    Passivo_Ano5 = Float64[],
+    Custo_LP = Float64[],
+    Custo_MILP = Float64[],
+    Previsao_SP = Float64[],
+    Erro_LP = Float64[],
+    Erro_MILP = Float64[]
+)
+
+for δ in deltas
+    liab_mod = copy(liabilities)
+    liab_mod[sweep_year] += δ
+
+    # Resolver LP
+    m_lp, _, _ = solve_dedication_lp(bonds, cf, liab_mod, reinvest_rate)
+    cost_lp = objective_value(m_lp)
+
+    # Resolver MILP
+    m_milp, _, _ = solve_dedication_milp(bonds, cf, liab_mod, reinvest_rate)
+    cost_milp = objective_value(m_milp)
+
+    # Previsão linear via shadow price
+    predicted = lp_base + sp5 * δ
+
+    push!(param_df, (
+        δ,
+        liabilities[sweep_year] + δ,
+        cost_lp,
+        cost_milp,
+        predicted,
+        cost_lp - predicted,
+        cost_milp - predicted
+    ))
+end
+
+pretty_table(param_df, alignment=:c)
+
+println("""
+
+  Observações:
+  • O custo LP coincide com a previsão do shadow price para perturbações
+    que não provocam troca de base. Quando a base muda, surgem desvios.
+  • O custo MILP varia em degraus — a solução inteira permanece a mesma
+    até que a perturbação force uma troca de lotes, quando salta para
+    um novo patamar.
+  • A divergência LP vs MILP confirma que os shadow prices da relaxação
+    são guias direcionais, não previsões exatas para o problema inteiro.
+""")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 11. CUSTOS REDUZIDOS: Quais bonds estão "quase" na solução? (DeJans, 2025)
+# ─────────────────────────────────────────────────────────────────────────────
+#  O custo reduzido de uma variável não-básica indica quanto seu coeficiente
+#  na função objetivo precisaria melhorar para que ela entrasse na base.
+#  Bonds com custo reduzido próximo de zero são candidatos sensíveis a
+#  pequenas mudanças de mercado (preço ou cupom).
+
+println("=" ^ 80)
+println("  CUSTOS REDUZIDOS DA RELAXAÇÃO LP")
+println("=" ^ 80)
+
+rc_df = DataFrame(
+    Bond = String[],
+    Lotes_LP = String[],
+    Custo_Reduzido = Float64[],
+    Interpretação = String[]
+)
+
+for j in 1:J
+    lots = value(x_lp[j])
+    rc = reduced_cost(x_lp[j])
+
+    if lots > 1e-6
+        interp = "Na solução (básica)"
+    elseif abs(rc) < 5.0
+        interp = "Quase entrando — sensível a mudanças de preço"
+    else
+        interp = "Distante da solução"
+    end
+
+    push!(rc_df, (
+        bonds[j].name,
+        @sprintf("%.3f", lots),
+        rc,
+        interp
+    ))
+end
+
+pretty_table(rc_df, alignment=:c)
+
+println("""
+
+  Interpretação:
+  • Bonds na solução (lotes > 0) têm custo reduzido zero por definição.
+  • Um custo reduzido de +X para um bond fora da solução significa que
+    seu preço precisaria cair X por lote para que valesse a pena incluí-lo.
+  • Bonds com custo reduzido pequeno são os mais sensíveis a flutuações
+    de mercado — uma leve queda no preço ou aumento no cupom poderia
+    trazê-los para a carteira ótima.
+""")
+
 println("=" ^ 80)
 println("  FIM DA ANÁLISE")
 println("=" ^ 80)
