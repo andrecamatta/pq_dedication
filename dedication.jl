@@ -159,7 +159,7 @@ println("=" ^ 80)
 
 milp_status = termination_status(model_milp)
 println("Status: $milp_status")
-println("Custo total da carteira: R$ $(fmt_brl(objective_value(model_milp)))")
+println("Custo total da carteira: R\$ $(fmt_brl(objective_value(model_milp)))")
 
 # Carteira comprada
 println("\n  Carteira de Bonds Comprados:")
@@ -233,11 +233,11 @@ println("  ANÁLISE DE SENSIBILIDADE — SHADOW PRICES")
 println("=" ^ 80)
 
 println("\nRelaxação LP:")
-println("  Custo LP (contínuo):  R$ $(fmt_brl(objective_value(model_lp)))")
-println("  Custo MILP (inteiro): R$ $(fmt_brl(objective_value(model_milp)))")
+println("  Custo LP (contínuo):  R\$ $(fmt_brl(objective_value(model_lp)))")
+println("  Custo MILP (inteiro): R\$ $(fmt_brl(objective_value(model_milp)))")
 gap = objective_value(model_milp) - objective_value(model_lp)
 gap_pct = 100 * gap / objective_value(model_lp)
-println("  Gap de integralidade: R$ $(fmt_brl(gap)) ($(@sprintf("%.2f", gap_pct))%)")
+println("  Gap de integralidade: R\$ $(fmt_brl(gap)) ($(@sprintf("%.2f", gap_pct))%)")
 
 # Shadow prices das restrições de balanço
 shadow_prices = [dual(model_lp[:balance][t]) for t in 1:T]
@@ -271,7 +271,7 @@ for t in 1:T
         sp,
         discount_factor,
         @sprintf("%.3f%%", spot_rate * 100),
-        @sprintf("R$ %.4f", discount_factor)
+        @sprintf("R\$ %.4f", discount_factor)
     ))
 end
 
@@ -292,8 +292,8 @@ println("""
   │                                                                        │
   │  O shadow price da restrição de passivo do Ano t nos diz:             │
   │                                                                        │
-  │    "Se o passivo do Ano t aumentar em R$ 1, o custo mínimo           │
-  │     da carteira dedicada aumentará em R$ [shadow_price]."            │
+  │    "Se o passivo do Ano t aumentar em R\$ 1, o custo mínimo           │
+  │     da carteira dedicada aumentará em R\$ [shadow_price]."            │
   │                                                                        │
   │  Isso é exatamente o FATOR DE DESCONTO implícito da carteira.        │
   │  A partir dele, extraímos a taxa spot implícita para cada prazo.     │
@@ -324,17 +324,17 @@ model_shocked, _, _ = solve_dedication_lp(bonds, cf, liabilities_shocked, reinve
 delta_cost = objective_value(model_shocked) - objective_value(model_lp)
 predicted_delta = shadow_prices[shock_year] * shock_amount
 
-println("\n  Custo original (LP):          R$ $(fmt_brl(objective_value(model_lp)))")
-println("  Custo com choque (LP):        R$ $(fmt_brl(objective_value(model_shocked)))")
-println("  Aumento real no custo:        R$ $(fmt_brl(delta_cost))")
-println("  Previsão via shadow price:    R$ $(fmt_brl(predicted_delta))  (shadow_price × Δpassivo)")
-println("  Erro de aproximação:          R$ $(fmt_brl(abs(delta_cost - predicted_delta)))")
+println("\n  Custo original (LP):          R\$ $(fmt_brl(objective_value(model_lp)))")
+println("  Custo com choque (LP):        R\$ $(fmt_brl(objective_value(model_shocked)))")
+println("  Aumento real no custo:        R\$ $(fmt_brl(delta_cost))")
+println("  Previsão via shadow price:    R\$ $(fmt_brl(predicted_delta))  (shadow_price × Δpassivo)")
+println("  Erro de aproximação:          R\$ $(fmt_brl(abs(delta_cost - predicted_delta)))")
 
 println("""
 
   → O shadow price prevê com precisão o impacto marginal!
     Isso confirma que o dual do Ano 5 é de fato o "preço"
-    de cobrir +1 R$ de passivo naquele ano.
+    de cobrir +1 real de passivo naquele ano.
 """)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -545,7 +545,7 @@ println("""
 # 13. CENÁRIO REALISTA: Passivos maiores → gap de integralidade menor
 # ─────────────────────────────────────────────────────────────────────────────
 #  O gap de 23% no cenário base é artificialmente alto porque os passivos
-#  são pequenos em relação aos lotes de R$ 1.000. Multiplicando os passivos
+#  são pequenos em relação aos lotes de R\$ 1.000. Multiplicando os passivos
 #  por 100, o gap cai drasticamente — como ocorre em carteiras reais.
 
 scale = 5
@@ -563,10 +563,10 @@ cost_lp_lg = objective_value(model_lp_lg)
 gap_lg = cost_milp_lg - cost_lp_lg
 gap_pct_lg = 100 * gap_lg / cost_lp_lg
 
-println("\n  Passivos totais: R$ $(fmt_brl(sum(liabilities_large)))")
-println("  Custo MILP:      R$ $(fmt_brl(cost_milp_lg))")
-println("  Custo LP:        R$ $(fmt_brl(cost_lp_lg))")
-println("  Gap:             R$ $(fmt_brl(gap_lg)) ($(@sprintf("%.2f", gap_pct_lg))%)")
+println("\n  Passivos totais: R\$ $(fmt_brl(sum(liabilities_large)))")
+println("  Custo MILP:      R\$ $(fmt_brl(cost_milp_lg))")
+println("  Custo LP:        R\$ $(fmt_brl(cost_lp_lg))")
+println("  Gap:             R\$ $(fmt_brl(gap_lg)) ($(@sprintf("%.2f", gap_pct_lg))%)")
 
 # Shadow prices do cenário grande
 shadow_lg = [dual(model_lp_lg[:balance][t]) for t in 1:T]
@@ -604,6 +604,62 @@ println("""
   • As taxas implícitas podem diferir ligeiramente entre cenários porque
     a base ótima do LP muda quando a escala dos passivos altera as
     proporções relativas entre lotes e passivos.
+""")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 14. CURVA DeJans: custo marginal MILP por re-resolução (cenário ×5)
+# ─────────────────────────────────────────────────────────────────────────────
+#  Para cada ano t, perturbamos o passivo em +Δ, re-resolvemos o MILP, e
+#  calculamos o custo marginal real: (custo_novo - custo_original) / Δ.
+#  Isso dá o "shadow price do MILP" — que pode diferir do shadow price LP.
+
+println("\n" * "=" ^ 80)
+println("  CURVA DeJans: Shadow Price LP vs Custo Marginal MILP (cenário ×$scale)")
+println("=" ^ 80)
+
+delta_perturbation = 2000.0  # perturbação por ano (grande o suficiente para forçar recomposição)
+
+milp_marginal = Float64[]
+for t in 1:T
+    liab_pert = copy(liabilities_large)
+    liab_pert[t] += delta_perturbation
+    m_pert, _, _ = solve_dedication_milp(bonds, cf, liab_pert, reinvest_rate)
+    marginal = (objective_value(m_pert) - cost_milp_lg) / delta_perturbation
+    push!(milp_marginal, marginal)
+end
+
+# Converter custo marginal MILP em taxa spot implícita
+rates_milp = Float64[]
+for t in 1:T
+    df = milp_marginal[t]
+    if df > 0
+        push!(rates_milp, (1.0 / df)^(1.0 / t) - 1.0)
+    else
+        push!(rates_milp, NaN)
+    end
+end
+
+dejans_df = DataFrame(
+    Ano = 1:T,
+    SP_LP = [@sprintf("%.4f", shadow_lg[t]) for t in 1:T],
+    Taxa_LP = [@sprintf("%.3f%%", rates_lg[t] * 100) for t in 1:T],
+    CM_MILP = [@sprintf("%.4f", milp_marginal[t]) for t in 1:T],
+    Taxa_MILP = [isnan(rates_milp[t]) ? "n/a" : @sprintf("%.3f%%", rates_milp[t] * 100) for t in 1:T],
+    Taxa_Mercado = [@sprintf("%.3f%%", rates_market[t] * 100) for t in 1:T],
+    Erro_bps = [isnan(rates_milp[t]) ? "n/a" : string(round(Int, (rates_lg[t] - rates_milp[t]) * 10000)) for t in 1:T]
+)
+pretty_table(dejans_df, alignment=:c)
+
+println("""
+
+  Interpretação:
+  • SP LP = shadow price da relaxação LP (fator de desconto implícito).
+  • CM MILP = custo marginal real do MILP (re-resolução por período).
+  • Erro = diferença entre taxa LP e taxa MILP em basis points.
+  • Quando o MILP absorve a perturbação via surplus sem recompor a
+    carteira, o custo marginal é zero (taxa → ∞, ou NaN).
+  • Nos períodos onde o MILP precisa recompor, o custo marginal pode
+    ser maior ou menor que o shadow price LP.
 """)
 
 println("=" ^ 80)
