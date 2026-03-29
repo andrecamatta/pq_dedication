@@ -17,7 +17,7 @@
 using JuMP, HiGHS, DataFrames, PrettyTables, Printf
 
 # Helper: formatar número com separador de milhares (Julia não suporta %,)
-function fmt_usd(v::Real; decimals=2)
+function fmt_brl(v::Real; decimals=2)
     s = @sprintf("%.2f", v)
     parts = split(s, '.')
     int_part = parts[1]
@@ -41,7 +41,7 @@ end
 # Horizonte: 8 anos (t = 1, 2, …, 8)
 T = 8
 
-# Passivos do fundo (USD) — o que precisamos pagar a cada ano
+# Passivos do fundo (R$) — o que precisamos pagar a cada ano
 liabilities = [400.0, 800.0, 3200.0, 400.0, 3200.0, 4800.0, 3200.0, 400.0]
 
 # Taxa de reinvestimento do excesso de caixa (conservadora)
@@ -50,7 +50,7 @@ reinvest_rate = 0.02
 # Cada bond j é definido por:
 #   - coupon_rate: taxa de cupom anual (% do face value)
 #   - maturity:    ano de vencimento (paga face value + último cupom)
-#   - price:       preço de mercado por lote (1 lote = 1000 USD de face value)
+#   - price:       preço de mercado por lote (1 lote = 1000 R$ de face value)
 #   - face_value:  valor de face por lote
 
 const FACE_VALUE = 1000.0  # valor de face por lote (fixo para todos)
@@ -159,7 +159,7 @@ println("=" ^ 80)
 
 milp_status = termination_status(model_milp)
 println("Status: $milp_status")
-println("Custo total da carteira: USD $(fmt_usd(objective_value(model_milp)))")
+println("Custo total da carteira: R$ $(fmt_brl(objective_value(model_milp)))")
 
 # Carteira comprada
 println("\n  Carteira de Bonds Comprados:")
@@ -233,11 +233,11 @@ println("  ANÁLISE DE SENSIBILIDADE — SHADOW PRICES")
 println("=" ^ 80)
 
 println("\nRelaxação LP:")
-println("  Custo LP (contínuo):  USD $(fmt_usd(objective_value(model_lp)))")
-println("  Custo MILP (inteiro): USD $(fmt_usd(objective_value(model_milp)))")
+println("  Custo LP (contínuo):  R$ $(fmt_brl(objective_value(model_lp)))")
+println("  Custo MILP (inteiro): R$ $(fmt_brl(objective_value(model_milp)))")
 gap = objective_value(model_milp) - objective_value(model_lp)
 gap_pct = 100 * gap / objective_value(model_lp)
-println("  Gap de integralidade: USD $(fmt_usd(gap)) ($(@sprintf("%.2f", gap_pct))%)")
+println("  Gap de integralidade: R$ $(fmt_brl(gap)) ($(@sprintf("%.2f", gap_pct))%)")
 
 # Shadow prices das restrições de balanço
 shadow_prices = [dual(model_lp[:balance][t]) for t in 1:T]
@@ -246,7 +246,7 @@ shadow_prices = [dual(model_lp[:balance][t]) for t in 1:T]
 #   shadow_price(t) ≈ fator de desconto para o ano t
 #   → taxa spot: r_t = (1/shadow_price(t))^(1/t) - 1
 # Nota: em modelos de dedication, o shadow price da restrição do ano t
-# representa o custo marginal (em valor presente) de cobrir +1 USD de passivo nesse ano.
+# representa o custo marginal (em valor presente) de cobrir +1 R$ de passivo nesse ano.
 
 println("\n  Shadow Prices e Estrutura a Termo Implícita:")
 sensitivity_df = DataFrame(
@@ -271,7 +271,7 @@ for t in 1:T
         sp,
         discount_factor,
         @sprintf("%.3f%%", spot_rate * 100),
-        @sprintf("USD %.4f", discount_factor)
+        @sprintf("R$ %.4f", discount_factor)
     ))
 end
 
@@ -292,8 +292,8 @@ println("""
   │                                                                        │
   │  O shadow price da restrição de passivo do Ano t nos diz:             │
   │                                                                        │
-  │    "Se o passivo do Ano t aumentar em USD 1, o custo mínimo           │
-  │     da carteira dedicada aumentará em USD [shadow_price]."            │
+  │    "Se o passivo do Ano t aumentar em R$ 1, o custo mínimo           │
+  │     da carteira dedicada aumentará em R$ [shadow_price]."            │
   │                                                                        │
   │  Isso é exatamente o FATOR DE DESCONTO implícito da carteira.        │
   │  A partir dele, extraímos a taxa spot implícita para cada prazo.     │
@@ -324,17 +324,17 @@ model_shocked, _, _ = solve_dedication_lp(bonds, cf, liabilities_shocked, reinve
 delta_cost = objective_value(model_shocked) - objective_value(model_lp)
 predicted_delta = shadow_prices[shock_year] * shock_amount
 
-println("\n  Custo original (LP):          USD $(fmt_usd(objective_value(model_lp)))")
-println("  Custo com choque (LP):        USD $(fmt_usd(objective_value(model_shocked)))")
-println("  Aumento real no custo:        USD $(fmt_usd(delta_cost))")
-println("  Previsão via shadow price:    USD $(fmt_usd(predicted_delta))  (shadow_price × Δpassivo)")
-println("  Erro de aproximação:          USD $(fmt_usd(abs(delta_cost - predicted_delta)))")
+println("\n  Custo original (LP):          R$ $(fmt_brl(objective_value(model_lp)))")
+println("  Custo com choque (LP):        R$ $(fmt_brl(objective_value(model_shocked)))")
+println("  Aumento real no custo:        R$ $(fmt_brl(delta_cost))")
+println("  Previsão via shadow price:    R$ $(fmt_brl(predicted_delta))  (shadow_price × Δpassivo)")
+println("  Erro de aproximação:          R$ $(fmt_brl(abs(delta_cost - predicted_delta)))")
 
 println("""
 
   → O shadow price prevê com precisão o impacto marginal!
     Isso confirma que o dual do Ano 5 é de fato o "preço"
-    de cobrir +1 USD de passivo naquele ano.
+    de cobrir +1 R$ de passivo naquele ano.
 """)
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -545,7 +545,7 @@ println("""
 # 13. CENÁRIO REALISTA: Passivos maiores → gap de integralidade menor
 # ─────────────────────────────────────────────────────────────────────────────
 #  O gap de 23% no cenário base é artificialmente alto porque os passivos
-#  são pequenos em relação aos lotes de USD 1.000. Multiplicando os passivos
+#  são pequenos em relação aos lotes de R$ 1.000. Multiplicando os passivos
 #  por 100, o gap cai drasticamente — como ocorre em carteiras reais.
 
 scale = 5
@@ -563,10 +563,10 @@ cost_lp_lg = objective_value(model_lp_lg)
 gap_lg = cost_milp_lg - cost_lp_lg
 gap_pct_lg = 100 * gap_lg / cost_lp_lg
 
-println("\n  Passivos totais: USD $(fmt_usd(sum(liabilities_large)))")
-println("  Custo MILP:      USD $(fmt_usd(cost_milp_lg))")
-println("  Custo LP:        USD $(fmt_usd(cost_lp_lg))")
-println("  Gap:             USD $(fmt_usd(gap_lg)) ($(@sprintf("%.2f", gap_pct_lg))%)")
+println("\n  Passivos totais: R$ $(fmt_brl(sum(liabilities_large)))")
+println("  Custo MILP:      R$ $(fmt_brl(cost_milp_lg))")
+println("  Custo LP:        R$ $(fmt_brl(cost_lp_lg))")
+println("  Gap:             R$ $(fmt_brl(gap_lg)) ($(@sprintf("%.2f", gap_pct_lg))%)")
 
 # Shadow prices do cenário grande
 shadow_lg = [dual(model_lp_lg[:balance][t]) for t in 1:T]
