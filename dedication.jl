@@ -606,62 +606,6 @@ println("""
     proporções relativas entre lotes e passivos.
 """)
 
-# ─────────────────────────────────────────────────────────────────────────────
-# 14. CURVA DeJans: custo marginal MILP por re-resolução (cenário ×5)
-# ─────────────────────────────────────────────────────────────────────────────
-#  Para cada ano t, perturbamos o passivo em +Δ, re-resolvemos o MILP, e
-#  calculamos o custo marginal real: (custo_novo - custo_original) / Δ.
-#  Isso dá o "shadow price do MILP" — que pode diferir do shadow price LP.
-
-println("\n" * "=" ^ 80)
-println("  CURVA DeJans: Shadow Price LP vs Custo Marginal MILP (cenário ×$scale)")
-println("=" ^ 80)
-
-delta_perturbation = 2000.0  # perturbação por ano (grande o suficiente para forçar recomposição)
-
-milp_marginal = Float64[]
-for t in 1:T
-    liab_pert = copy(liabilities_large)
-    liab_pert[t] += delta_perturbation
-    m_pert, _, _ = solve_dedication_milp(bonds, cf, liab_pert, reinvest_rate)
-    marginal = (objective_value(m_pert) - cost_milp_lg) / delta_perturbation
-    push!(milp_marginal, marginal)
-end
-
-# Converter custo marginal MILP em taxa spot implícita
-rates_milp = Float64[]
-for t in 1:T
-    df = milp_marginal[t]
-    if df > 0
-        push!(rates_milp, (1.0 / df)^(1.0 / t) - 1.0)
-    else
-        push!(rates_milp, NaN)
-    end
-end
-
-dejans_df = DataFrame(
-    Ano = 1:T,
-    SP_LP = [@sprintf("%.4f", shadow_lg[t]) for t in 1:T],
-    Taxa_LP = [@sprintf("%.3f%%", rates_lg[t] * 100) for t in 1:T],
-    CM_MILP = [@sprintf("%.4f", milp_marginal[t]) for t in 1:T],
-    Taxa_MILP = [isnan(rates_milp[t]) ? "n/a" : @sprintf("%.3f%%", rates_milp[t] * 100) for t in 1:T],
-    Taxa_Mercado = [@sprintf("%.3f%%", rates_market[t] * 100) for t in 1:T],
-    Erro_bps = [isnan(rates_milp[t]) ? "n/a" : string(round(Int, (rates_lg[t] - rates_milp[t]) * 10000)) for t in 1:T]
-)
-pretty_table(dejans_df, alignment=:c)
-
-println("""
-
-  Interpretação:
-  • SP LP = shadow price da relaxação LP (fator de desconto implícito).
-  • CM MILP = custo marginal real do MILP (re-resolução por período).
-  • Erro = diferença entre taxa LP e taxa MILP em basis points.
-  • Quando o MILP absorve a perturbação via surplus sem recompor a
-    carteira, o custo marginal é zero (taxa → ∞, ou NaN).
-  • Nos períodos onde o MILP precisa recompor, o custo marginal pode
-    ser maior ou menor que o shadow price LP.
-""")
-
 println("=" ^ 80)
 println("  FIM DA ANÁLISE")
 println("=" ^ 80)
