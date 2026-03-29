@@ -61,15 +61,16 @@ struct Bond
     face_value::Float64  # valor de face por lote
 end
 
+# Preços calculados como VP dos fluxos descontados a yield flat de 5%
 bonds = [
-    Bond("Bond A",  0.050, 3,  1020.0, 1000.0),  # 5.0%, vence ano 3
-    Bond("Bond B",  0.060, 5,  1050.0, 1000.0),  # 6.0%, vence ano 5
-    Bond("Bond C",  0.055, 7,  1000.0, 1000.0),  # 5.5%, vence ano 7
-    Bond("Bond D",  0.045, 2,   990.0, 1000.0),  # 4.5%, vence ano 2
-    Bond("Bond E",  0.070, 8,  1100.0, 1000.0),  # 7.0%, vence ano 8
-    Bond("Bond F",  0.040, 4,   980.0, 1000.0),  # 4.0%, vence ano 4
-    Bond("Bond G",  0.065, 6,  1060.0, 1000.0),  # 6.5%, vence ano 6
-    Bond("Bond H",  0.035, 1,   995.0, 1000.0),  # 3.5%, vence ano 1
+    Bond("T1",  0.035, 1,   985.71, 1000.0),  # 3.5%, vence ano 1
+    Bond("T2",  0.045, 2,   990.70, 1000.0),  # 4.5%, vence ano 2
+    Bond("T3",  0.050, 3,  1000.00, 1000.0),  # 5.0%, vence ano 3 (par)
+    Bond("T4",  0.040, 4,   964.54, 1000.0),  # 4.0%, vence ano 4
+    Bond("T5",  0.060, 5,  1043.13, 1000.0),  # 6.0%, vence ano 5
+    Bond("T6",  0.065, 6,  1076.14, 1000.0),  # 6.5%, vence ano 6
+    Bond("T7",  0.055, 7,  1028.93, 1000.0),  # 5.5%, vence ano 7
+    Bond("T8",  0.070, 8,  1129.26, 1000.0),  # 7.0%, vence ano 8
 ]
 
 J = length(bonds)
@@ -537,6 +538,71 @@ println("""
     mais cara que o "preço de mercado" do dinheiro — sinalizam escassez
     de instrumentos eficientes naquele horizonte.
   • Spreads negativos indicam prazos bem cobertos pelo universo disponível.
+""")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 13. CENÁRIO REALISTA: Passivos maiores → gap de integralidade menor
+# ─────────────────────────────────────────────────────────────────────────────
+#  O gap de 23% no cenário base é artificialmente alto porque os passivos
+#  são pequenos em relação aos lotes de USD 1.000. Multiplicando os passivos
+#  por 100, o gap cai drasticamente — como ocorre em carteiras reais.
+
+scale = 20
+
+println("\n" * "=" ^ 80)
+println("  CENÁRIO REALISTA: Passivos ×$scale")
+println("=" ^ 80)
+liabilities_large = liabilities .* scale
+
+model_milp_lg, x_milp_lg, s_milp_lg = solve_dedication_milp(bonds, cf, liabilities_large, reinvest_rate)
+model_lp_lg, x_lp_lg, s_lp_lg = solve_dedication_lp(bonds, cf, liabilities_large, reinvest_rate)
+
+cost_milp_lg = objective_value(model_milp_lg)
+cost_lp_lg = objective_value(model_lp_lg)
+gap_lg = cost_milp_lg - cost_lp_lg
+gap_pct_lg = 100 * gap_lg / cost_lp_lg
+
+println("\n  Passivos totais: USD $(fmt_usd(sum(liabilities_large)))")
+println("  Custo MILP:      USD $(fmt_usd(cost_milp_lg))")
+println("  Custo LP:        USD $(fmt_usd(cost_lp_lg))")
+println("  Gap:             USD $(fmt_usd(gap_lg)) ($(@sprintf("%.2f", gap_pct_lg))%)")
+
+# Shadow prices do cenário grande
+shadow_lg = [dual(model_lp_lg[:balance][t]) for t in 1:T]
+rates_lg = [(1.0 / abs(shadow_lg[t]))^(1.0 / t) - 1.0 for t in 1:T]
+
+println("\n  Carteira MILP (cenário grande):")
+for j in 1:J
+    lots = round(Int, value(x_milp_lg[j]))
+    if lots > 0
+        println("    $(bonds[j].name): $lots lotes")
+    end
+end
+
+println("\n  Estrutura a termo implícita (cenário grande):")
+for t in 1:T
+    sp = shadow_lg[t]
+    println("    Ano $t: shadow price = $(@sprintf("%.6f", sp)), taxa = $(@sprintf("%.3f%%", rates_lg[t]*100))")
+end
+
+# Comparar com cenário base
+println("\n  Comparação de taxas implícitas:")
+compare_rates = DataFrame(
+    Ano = 1:T,
+    Taxa_Base = [@sprintf("%.3f%%", rates_implicit[t] * 100) for t in 1:T],
+    Taxa_Grande = [@sprintf("%.3f%%", rates_lg[t] * 100) for t in 1:T],
+    Spread_bps = [round(Int, (rates_lg[t] - rates_implicit[t]) * 10000) for t in 1:T]
+)
+pretty_table(compare_rates, alignment=:c)
+
+println("""
+
+  Observações:
+  • O gap de integralidade caiu de $(@sprintf("%.2f", gap_pct))% para $(@sprintf("%.2f", gap_pct_lg))%.
+  • A carteira MILP agora é mais diversificada (mais títulos selecionados).
+  • As taxas implícitas podem diferir ligeiramente entre cenários porque
+    a base ótima do LP muda quando a escala dos passivos altera as
+    proporções relativas entre lotes e passivos.
 """)
 
 println("=" ^ 80)
