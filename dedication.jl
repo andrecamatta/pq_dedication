@@ -62,16 +62,17 @@ struct Bond
     price::Float64       # preço por lote no mercado secundário (= face para títulos ao par)
 end
 
-# Títulos ao par (preço = face = 1000)
+# Títulos com face = 1000, cupons crescentes, precificados a uma curva
+# de rendimento acima dos cupons (yields de 5,0% a 8,5% → preços < 1000)
 bonds = [
-    Bond("T1",  0.035, 1,  1000.0),  # 3.5%, vence ano 1
-    Bond("T2",  0.045, 2,  1000.0),  # 4.5%, vence ano 2
-    Bond("T3",  0.050, 3,  1000.0),  # 5.0%, vence ano 3
-    Bond("T4",  0.040, 4,  1000.0),  # 4.0%, vence ano 4
-    Bond("T5",  0.060, 5,  1000.0),  # 6.0%, vence ano 5
-    Bond("T6",  0.065, 6,  1000.0),  # 6.5%, vence ano 6
-    Bond("T7",  0.055, 7,  1000.0),  # 5.5%, vence ano 7
-    Bond("T8",  0.070, 8,  1000.0),  # 7.0%, vence ano 8
+    Bond("T1",  0.035, 1,   985.71),  # cupom 3.5%, yield 5.0%
+    Bond("T2",  0.040, 2,   972.71),  # cupom 4.0%, yield 5.5%
+    Bond("T3",  0.045, 3,   960.04),  # cupom 4.5%, yield 6.0%
+    Bond("T4",  0.050, 4,   948.61),  # cupom 5.0%, yield 6.5%
+    Bond("T5",  0.055, 5,   938.50),  # cupom 5.5%, yield 7.0%
+    Bond("T6",  0.060, 6,   929.88),  # cupom 6.0%, yield 7.5%
+    Bond("T7",  0.065, 7,   921.91),  # cupom 6.5%, yield 8.0%
+    Bond("T8",  0.070, 8,   915.42),  # cupom 7.0%, yield 8.5%
 ]
 
 J = length(bonds)
