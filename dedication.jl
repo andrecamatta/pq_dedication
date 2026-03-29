@@ -41,8 +41,8 @@ end
 # Horizonte: 8 anos (t = 1, 2, …, 8)
 T = 8
 
-# Passivos do fundo (em milhares de USD) — o que precisamos pagar a cada ano
-liabilities = [100.0, 200.0, 800.0, 100.0, 800.0, 1200.0, 800.0, 100.0]
+# Passivos do fundo (USD) — o que precisamos pagar a cada ano
+liabilities = [400.0, 800.0, 3200.0, 400.0, 3200.0, 4800.0, 3200.0, 400.0]
 
 # Taxa de reinvestimento do excesso de caixa (conservadora)
 reinvest_rate = 0.02
@@ -53,24 +53,25 @@ reinvest_rate = 0.02
 #   - price:       preço de mercado por lote (1 lote = 1000 USD de face value)
 #   - face_value:  valor de face por lote
 
+const FACE_VALUE = 1000.0  # valor de face por lote (fixo para todos)
+
 struct Bond
     name::String
     coupon_rate::Float64
     maturity::Int
-    price::Float64       # preço por lote no mercado secundário
-    face_value::Float64  # valor de face por lote
+    price::Float64       # preço por lote no mercado secundário (= face para títulos ao par)
 end
 
-# Preços calculados como VP dos fluxos descontados a yield flat de 5%
+# Títulos ao par (preço = face = 1000)
 bonds = [
-    Bond("T1",  0.035, 1,   985.71, 1000.0),  # 3.5%, vence ano 1
-    Bond("T2",  0.045, 2,   990.70, 1000.0),  # 4.5%, vence ano 2
-    Bond("T3",  0.050, 3,  1000.00, 1000.0),  # 5.0%, vence ano 3 (par)
-    Bond("T4",  0.040, 4,   964.54, 1000.0),  # 4.0%, vence ano 4
-    Bond("T5",  0.060, 5,  1043.13, 1000.0),  # 6.0%, vence ano 5
-    Bond("T6",  0.065, 6,  1076.14, 1000.0),  # 6.5%, vence ano 6
-    Bond("T7",  0.055, 7,  1028.93, 1000.0),  # 5.5%, vence ano 7
-    Bond("T8",  0.070, 8,  1129.26, 1000.0),  # 7.0%, vence ano 8
+    Bond("T1",  0.035, 1,  1000.0),  # 3.5%, vence ano 1
+    Bond("T2",  0.045, 2,  1000.0),  # 4.5%, vence ano 2
+    Bond("T3",  0.050, 3,  1000.0),  # 5.0%, vence ano 3
+    Bond("T4",  0.040, 4,  1000.0),  # 4.0%, vence ano 4
+    Bond("T5",  0.060, 5,  1000.0),  # 6.0%, vence ano 5
+    Bond("T6",  0.065, 6,  1000.0),  # 6.5%, vence ano 6
+    Bond("T7",  0.055, 7,  1000.0),  # 5.5%, vence ano 7
+    Bond("T8",  0.070, 8,  1000.0),  # 7.0%, vence ano 8
 ]
 
 J = length(bonds)
@@ -87,9 +88,9 @@ function build_cashflow_matrix(bonds::Vector{Bond}, T::Int)
         b = bonds[j]
         for t in 1:T
             if t < b.maturity
-                cf[j, t] = b.coupon_rate * b.face_value    # cupom
+                cf[j, t] = b.coupon_rate * FACE_VALUE    # cupom
             elseif t == b.maturity
-                cf[j, t] = b.coupon_rate * b.face_value + b.face_value  # cupom + face
+                cf[j, t] = b.coupon_rate * FACE_VALUE + FACE_VALUE  # cupom + face
             end
             # t > maturity → 0 (bond já venceu)
         end
@@ -503,11 +504,11 @@ d_market = zeros(T)
 
 for (idx, (j, b)) in enumerate(sorted_bonds)
     mat = b.maturity
-    coupon = b.coupon_rate * b.face_value
+    coupon = b.coupon_rate * FACE_VALUE
     # Preço = Σ(cupom × d[t], t=1..mat-1) + (cupom + face) × d[mat]
     # Resolver para d[mat]:
     pv_coupons = sum(coupon * d_market[t] for t in 1:mat-1; init=0.0)
-    d_market[mat] = (b.price - pv_coupons) / (coupon + b.face_value)
+    d_market[mat] = (b.price - pv_coupons) / (coupon + FACE_VALUE)
 end
 
 # Taxas spot de mercado
@@ -547,7 +548,7 @@ println("""
 #  são pequenos em relação aos lotes de USD 1.000. Multiplicando os passivos
 #  por 100, o gap cai drasticamente — como ocorre em carteiras reais.
 
-scale = 20
+scale = 5
 
 println("\n" * "=" ^ 80)
 println("  CENÁRIO REALISTA: Passivos ×$scale")
